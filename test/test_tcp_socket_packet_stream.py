@@ -1,0 +1,113 @@
+from wirecall.communication import TCPSocketPacketStream
+from pytest import raises
+
+
+def create_sock_pair():
+	from socket import socketpair
+
+	sock_0, sock_1 = socketpair()
+
+	return TCPSocketPacketStream(sock_0), TCPSocketPacketStream(sock_1)
+
+
+def test_io():
+	from random import randbytes
+
+	packet_a = randbytes(32)
+	packet_b = randbytes(32)
+
+	stream_a, stream_b = create_sock_pair()
+
+	stream_a.send_packet(packet_a)
+	stream_b.send_packet(packet_b)
+
+	assert stream_a.recv_packet() == packet_b
+	assert stream_b.recv_packet() == packet_a
+
+def test_close_send():
+	from wirecall.communication import StreamClosedError
+	from random import randbytes
+
+	packet_a = randbytes(32)
+
+	stream_a, stream_b = create_sock_pair()
+
+	stream_b.close()
+
+	with raises(StreamClosedError):
+		stream_a.send_packet(packet_a)
+		stream_a.send_packet(packet_a)
+		stream_a.send_packet(packet_a)
+
+def test_close_receive():
+	from wirecall.communication import StreamEnded
+
+	stream_a, stream_b = create_sock_pair()
+
+	stream_b.close()
+
+	with raises(StreamEnded):
+		stream_a.recv_packet()
+
+def test_close_receive_immediate():
+	from wirecall.communication import StreamEnded
+
+	stream_a, stream_b = create_sock_pair()
+
+	stream_b.close()
+
+	with raises(StreamEnded):
+		stream_a.recv_packet(immediate = True)
+
+def test_immediate():
+	from wirecall.communication import PacketUnavailable
+	from time import sleep
+
+	stream_a, stream_b = create_sock_pair()
+
+	stream_b.send_packet(b"test0")
+	sleep(0.05)
+	stream_a.recv_packet(immediate = True)
+
+	with raises(PacketUnavailable):
+		stream_a.recv_packet(immediate = True)
+
+def test_read_timeout():
+	from time import monotonic
+
+	stream_a, stream_b = create_sock_pair()
+
+	start = monotonic()
+
+	with raises(TimeoutError):
+		stream_a.recv_packet(header_timeout = 0.1)
+
+	delta = monotonic() - start
+
+	assert delta > 0.09
+	assert delta < 0.11
+
+def test_send_timeout():
+	from socket import SOL_SOCKET, SO_RCVBUF, SO_SNDBUF
+	from socket import socketpair
+	from random import randbytes
+	from time import monotonic
+
+	sock_a, sock_b = socketpair()
+
+	sock_a.setsockopt(SOL_SOCKET, SO_SNDBUF, 4096)
+	sock_b.setsockopt(SOL_SOCKET, SO_RCVBUF, 4096)
+
+	stream_a = TCPSocketPacketStream(sock_a)
+	big_chunk = randbytes(1024 * 1024)
+
+	start = monotonic()
+
+	with raises(TimeoutError):
+		for _ in range(100):
+			stream_a.send_packet(big_chunk, send_timeout = 0.1)
+
+	delta = monotonic() - start
+
+	assert delta > 0.09
+	assert delta < 0.11
