@@ -1,5 +1,9 @@
 from typing import TYPE_CHECKING
 
+__all__ = [
+	"RPCManager",
+	"JSONSerializable"
+]
 
 if TYPE_CHECKING:
 	from .event_manager import JSONSerializable

@@ -1,5 +1,10 @@
 from typing import TYPE_CHECKING
 
+__all__ = [
+	"EventManager",
+	"JSONSerializable"
+]
+
 if TYPE_CHECKING:
 	type JSONSerializable = None | bool | int | float | str | list[JSONSerializable] | dict[str, JSONSerializable]
 
