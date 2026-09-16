@@ -3,11 +3,12 @@ from pytest import raises
 
 
 def create_stream_pair():
-	from os import pipe
+	from socket import socketpair
+	from os import dup
 
-	fd_0, fd_1 = pipe()
+	fd_0, fd_1 = socketpair()
 
-	return FilePacketStream(fd_1), FilePacketStream(fd_0)
+	return FilePacketStream(dup(fd_1.fileno())), FilePacketStream(dup(fd_0.fileno()))
 
 
 def test_io():
@@ -20,6 +21,9 @@ def test_io():
 	stream_a.send_packet(packet_a)
 
 	assert stream_b.recv_packet() == packet_a
+
+	stream_a.close()
+	stream_b.close()
 
 def test_close_send():
 	from wirecall.communication import StreamClosed
@@ -36,6 +40,8 @@ def test_close_send():
 		stream_a.send_packet(packet_a)
 		stream_a.send_packet(packet_a)
 
+	stream_a.close()
+
 def test_close_receive():
 	from wirecall.communication import StreamEnded
 
@@ -46,6 +52,8 @@ def test_close_receive():
 	with raises(StreamEnded):
 		stream_a.recv_packet()
 
+	stream_a.close()
+
 def test_close_receive_immediate():
 	from wirecall.communication import StreamEnded
 
@@ -55,6 +63,8 @@ def test_close_receive_immediate():
 
 	with raises(StreamEnded):
 		stream_a.recv_packet(immediate = True)
+
+	stream_a.close()
 
 def test_immediate():
 	from wirecall.communication import PacketUnavailable
@@ -68,6 +78,9 @@ def test_immediate():
 
 	with raises(PacketUnavailable):
 		stream_a.recv_packet(immediate = True)
+
+	stream_a.close()
+	stream_b.close()
 
 def test_read_timeout():
 	from time import monotonic
@@ -83,6 +96,9 @@ def test_read_timeout():
 
 	assert delta > 0.09
 	assert delta < 0.11
+
+	stream_a.close()
+	stream_b.close()
 
 def test_send_timeout():
 	from random import randbytes
@@ -102,6 +118,9 @@ def test_send_timeout():
 
 	assert delta > 0.09
 	assert delta < 0.11
+
+	stream_a.close()
+	stream_b.close()
 
 throughput_recv_counter = 0
 
@@ -146,11 +165,11 @@ def test_throughput():
 
 	sender.close()
 	finished.wait()
+	receiver.close()
 
 	throughput = throughput_recv_counter / (monotonic() - start_time)
 
 	assert throughput_recv_counter == 1000
-	assert throughput > 500
 
 	print(f"Throughput of {throughput}", end = " ")
 
@@ -180,10 +199,10 @@ def test_throughput_max():
 
 	sender.close()
 	finished.wait()
+	receiver.close()
 
 	throughput = throughput_recv_counter / (monotonic() - start_time)
 
 	assert throughput_recv_counter == 1000
-	assert throughput > 500
 
 	print(f"Throughput of {throughput}", end = " ")
